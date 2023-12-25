@@ -3,6 +3,7 @@ package config
 import (
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
+	"log"
 	"os"
 )
 
@@ -14,7 +15,11 @@ type Http struct {
 	Port int `yaml:"port"`
 }
 
-func NewConfig(filePath string, logger *zap.Logger) (*Config, error) {
+func NewConfig(filePath string) (*Config, error) {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Logger init error. %v", err)
+	}
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		logger.Error("Failed to read config file", zap.String("file_path", filePath), zap.Error(err))
