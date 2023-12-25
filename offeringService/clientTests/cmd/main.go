@@ -1,8 +1,8 @@
 package main
 
 import (
-	"Go_project/offeringService/clientTests"
-	"Go_project/offeringService/clientTests/api"
+	client "Go_project/clientTests"
+	"Go_project/clientTests/api"
 )
 
 func main() {

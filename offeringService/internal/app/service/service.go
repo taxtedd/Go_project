@@ -1,10 +1,12 @@
 package service
 
 import (
-	"Go_project/offeringService/pkg/models"
+	"Go_project/pkg/models"
 	"encoding/json"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
+	"go.uber.org/zap"
+	"log"
 	"math"
 	"time"
 )
@@ -43,8 +45,13 @@ func (offeringService *OfferingService) GetPrice(from models.Geolocation, to mod
 }
 
 func (offeringService *OfferingService) EncodeJwt(offer *models.Offer) (string, error) {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Logger init error. %v", err)
+	}
 	offerJSON, err := json.Marshal(offer)
 	if err != nil {
+		logger.Error("Error signing JWT token", zap.Error(err))
 		return "", err
 	}
 
@@ -56,10 +63,19 @@ func (offeringService *OfferingService) EncodeJwt(offer *models.Offer) (string, 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, payload)
 
 	t, err := token.SignedString([]byte(jwtSecretKey))
+	if err != nil {
+		logger.Error("Error signing JWT token", zap.Error(err))
+		return "", err
+	}
+
 	return t, err
 }
 
 func (offeringService *OfferingService) DecodeJwt(jwtToken string) (*models.Offer, error) {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Logger init error. %v", err)
+	}
 	token, err := jwt.Parse(jwtToken, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -69,10 +85,12 @@ func (offeringService *OfferingService) DecodeJwt(jwtToken string) (*models.Offe
 	})
 
 	if err != nil {
+		logger.Error("Error parsing JWT token", zap.Error(err))
 		return nil, err
 	}
 
 	if !token.Valid {
+		logger.Error("Invalid JWT token")
 		return nil, fmt.Errorf("invalid jwt token")
 	}
 
@@ -82,6 +100,7 @@ func (offeringService *OfferingService) DecodeJwt(jwtToken string) (*models.Offe
 		var offerJSON models.Offer
 		err = json.Unmarshal([]byte(offer), &offerJSON)
 		if err != nil {
+			logger.Error("Error decoding offer from JSON", zap.Error(err))
 			return nil, err
 		}
 

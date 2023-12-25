@@ -1,8 +1,8 @@
 package main
 
 import (
-	"Go_project/offeringService/internal/app"
-	"Go_project/offeringService/internal/app/config"
+	taxiApp "Go_project/internal/app"
+	"Go_project/internal/app/config"
 	"context"
 	"flag"
 	"fmt"

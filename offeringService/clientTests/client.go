@@ -1,7 +1,7 @@
 package client
 
 import (
-	"Go_project/offeringService/internal/app/api/requests"
+	"Go_project/internal/app/api/requests"
 	"bytes"
 	"encoding/json"
 	"fmt"

@@ -1,28 +1,25 @@
 package handlers
 
 import (
-	"Go_project/offeringService/internal/app/api/requests"
-	"Go_project/offeringService/internal/app/service"
-	"Go_project/offeringService/pkg/models"
+	"Go_project/internal/app/api/requests"
+	"Go_project/internal/app/service"
+	"Go_project/pkg/models"
 	"encoding/json"
-	"errors"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 	"io"
-	"log"
 	"net/http"
 )
 
-var ErrorCloseReqBody = errors.New("failed to close request body")
-var ErrorReadReqBody = errors.New("failed to read request body")
-
 type OfferingHandler struct {
 	Service *service.OfferingService
+	Logger  *zap.Logger
 	Server  *http.Server
 }
 
-func NewHandler() *OfferingHandler {
+func NewHandler(logger *zap.Logger) *OfferingHandler {
 	offerService := service.NewService()
-	handler := OfferingHandler{Service: offerService}
+	handler := OfferingHandler{Service: offerService, Logger: logger}
 
 	router := chi.NewRouter()
 	router.Post("/offers", handler.CreateOffer)
@@ -39,19 +36,20 @@ func NewHandler() *OfferingHandler {
 func (handler *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Println(ErrorReadReqBody, err)
+		handler.Logger.Error("Error reading request body", zap.Error(err))
 	}
 
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println(ErrorCloseReqBody, err)
+			handler.Logger.Error("Error closing request body", zap.Error(err))
 		}
 	}(r.Body)
 
 	var offerRequest requests.CreateOfferRequest
 	err = json.Unmarshal(bytes, &offerRequest)
 	if err != nil {
+		handler.Logger.Error("Error unmarshalling JSON", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -61,18 +59,21 @@ func (handler *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Reque
 
 	encodedJwt, err := handler.Service.EncodeJwt(&offer)
 	if err != nil {
+		handler.Logger.Error("Error encoding JWT", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	response := requests.CreateOfferResponse{OfferId: encodedJwt}
 	res, err := json.Marshal(response)
 	if err != nil {
+		handler.Logger.Error("Error marshalling JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(res)
 	if err != nil {
+		handler.Logger.Error("Error writing response", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -84,6 +85,7 @@ func (handler *OfferingHandler) ParseOffer(w http.ResponseWriter, r *http.Reques
 
 	decodedOffer, err := handler.Service.DecodeJwt(offerID)
 	if err != nil {
+		handler.Logger.Error("Error decoding JWT", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -91,12 +93,14 @@ func (handler *OfferingHandler) ParseOffer(w http.ResponseWriter, r *http.Reques
 	response := requests.ParseOfferResponse{From: decodedOffer.From, To: decodedOffer.To, Price: decodedOffer.Price, ClientId: decodedOffer.ClientId}
 	res, err := json.Marshal(response)
 	if err != nil {
+		handler.Logger.Error("Error marshalling JSON", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	_, err = w.Write(res)
 	if err != nil {
+		handler.Logger.Error("Error writing response", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

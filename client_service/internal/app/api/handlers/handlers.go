@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
@@ -14,10 +13,6 @@ import (
 	"client_service/internal/app/models"
 	"client_service/internal/app/mongodb"
 	"github.com/go-chi/chi/v5"
-)
-
-var (
-	ErrorCloseReqBody = errors.New("failed to close request body")
 )
 
 type ClientHandler struct {

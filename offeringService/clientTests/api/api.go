@@ -1,9 +1,9 @@
 package api
 
 import (
-	client "Go_project/offeringService/clientTests"
-	"Go_project/offeringService/internal/app/api/requests"
-	"Go_project/offeringService/pkg/models"
+	client "Go_project/clientTests"
+	"Go_project/internal/app/api/requests"
+	"Go_project/pkg/models"
 	"encoding/json"
 	"fmt"
 )
