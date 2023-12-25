@@ -5,19 +5,21 @@ import (
 	"client_service/internal/app/config"
 	"client_service/internal/app/mongodb"
 	"context"
-	"fmt"
+	"go.uber.org/zap"
+	"log"
 )
 
 type App struct {
 	cfg     *config.Config
 	handler *handlers.ClientHandler
+	Logger  *zap.Logger
 }
 
 func (app *App) Run() {
 	go func() {
 		err := app.handler.Server.ListenAndServe()
 		if err != nil {
-			fmt.Println("Ошибка запуска сервера:", err)
+			app.Logger.Error("Error starting server", zap.Error(err))
 		}
 	}()
 
@@ -25,18 +27,26 @@ func (app *App) Run() {
 }
 
 func (app *App) Stop(ctx context.Context) {
-	fmt.Println(app.handler.Server.Shutdown(ctx))
+	if err := app.handler.Server.Shutdown(ctx); err != nil {
+		app.Logger.Error("Error shutting down server", zap.Error(err))
+	}
 }
 
 func NewApp(cfg *config.Config) *App {
+	logger, err := zap.NewProduction()
+	if err != nil {
+		log.Fatalf("Logger init error. %v", err)
+		return nil
+	}
+
 	db, err := mongodb.NewDatabase(cfg.Database.URI, cfg.Database.Name) // Pass the database name from config
 	if err != nil {
-		fmt.Println("Ошибка инациализации бд:", err)
+		logger.Error("Error initializing database", zap.Error(err))
 	}
 
 	app := &App{
 		cfg:     cfg,
-		handler: handlers.NewHandler(db, cfg),
+		handler: handlers.NewHandler(db, cfg, logger),
 	}
 	return app
 }

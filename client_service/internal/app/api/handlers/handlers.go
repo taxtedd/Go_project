@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"go.uber.org/zap"
 	"io"
-	"log"
 	"net/http"
 	"time"
 
@@ -18,17 +18,17 @@ import (
 
 var (
 	ErrorCloseReqBody = errors.New("failed to close request body")
-	ErrorReadReqBody  = errors.New("failed to read request body")
 )
 
 type ClientHandler struct {
 	Server   *http.Server
 	Config   *config.Config
 	Database *mongodb.Database
+	Logger   *zap.Logger
 }
 
-func NewHandler(db *mongodb.Database, cfg *config.Config) *ClientHandler {
-	handler := ClientHandler{Config: cfg, Database: db}
+func NewHandler(db *mongodb.Database, cfg *config.Config, log *zap.Logger) *ClientHandler {
+	handler := ClientHandler{Config: cfg, Database: db, Logger: log}
 
 	router := chi.NewRouter()
 	router.Post("/trips", handler.createTrip)
@@ -51,12 +51,14 @@ func (handler *ClientHandler) getTrip(w http.ResponseWriter, r *http.Request) {
 	tripID := chi.URLParam(r, "trip_id")
 	tripData, err := handler.Database.GetTripByTripId(tripID)
 	if err != nil {
+		handler.Logger.Warn("Failed to get trip by ID")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	response, err := json.Marshal(tripData)
 	if err != nil {
+		handler.Logger.Warn("Failed to marshal trip data")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -72,12 +74,14 @@ func (handler *ClientHandler) listTrips(w http.ResponseWriter, r *http.Request) 
 	userID := r.Header.Get("user_id")
 	tripsData, err := handler.Database.GetTripsByUserId(userID)
 	if err != nil {
+		handler.Logger.Warn("Failed to get trips by user ID")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	response, err := json.Marshal(tripsData)
 	if err != nil {
+		handler.Logger.Warn("Failed to marshal trips data")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -92,6 +96,7 @@ func (handler *ClientHandler) cancelTrip(w http.ResponseWriter, r *http.Request)
 
 	tripID := chi.URLParam(r, "trip_id")
 	if err := handler.Database.CancelTrip(tripID); err != nil {
+		handler.Logger.Warn("Failed to cancel trip")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -106,26 +111,28 @@ func (handler *ClientHandler) createTrip(w http.ResponseWriter, r *http.Request)
 	userID := r.Header.Get("user_id")
 	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		log.Println(ErrorReadReqBody, err)
+		handler.Logger.Warn("Failed to read request body")
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println(ErrorCloseReqBody, err)
+			handler.Logger.Warn("Failed to close request body", zap.Error(err))
 		}
 	}(r.Body)
 
 	var request requests.RequestCreateTrip
 	err = json.Unmarshal(bytes, &request)
 	if err != nil {
+		handler.Logger.Warn("Failed to unmarshal request")
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
 
 	offer, err := handler.getOfferDetails(request.OfferId)
 	if err != nil {
+		handler.Logger.Warn("Failed to get offer details")
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -146,6 +153,7 @@ func (handler *ClientHandler) createTrip(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err := handler.Database.CreateTrip(tripData); err != nil {
+		handler.Logger.Warn("Failed to create trip")
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -161,7 +169,7 @@ func (handler *ClientHandler) getOfferDetails(offerID string) (*models.Offer, er
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			log.Println(ErrorCloseReqBody, err)
+			handler.Logger.Warn("Failed to close request body in getOfferDetails", zap.Error(err))
 		}
 	}(resp.Body)
 
