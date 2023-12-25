@@ -55,7 +55,7 @@ func (offeringService *OfferingService) EncodeJwt(offer *models.Offer) (string, 
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, payload)
 
-	t, err := token.SignedString(jwtSecretKey)
+	t, err := token.SignedString([]byte(jwtSecretKey))
 	return t, err
 }
 
@@ -65,8 +65,12 @@ func (offeringService *OfferingService) DecodeJwt(jwtToken string) (*models.Offe
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 
-		return jwtSecretKey, nil
+		return []byte(jwtSecretKey), nil
 	})
+
+	if err != nil {
+		return nil, err
+	}
 
 	if !token.Valid {
 		return nil, fmt.Errorf("invalid jwt token")

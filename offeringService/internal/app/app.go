@@ -14,7 +14,7 @@ type App struct {
 
 func (app *App) Run() {
 	go func() {
-		err := app.handler.server.ListenAndServe()
+		err := app.handler.Server.ListenAndServe()
 		if err != nil {
 			fmt.Println("Ошибка запуска сервера:", err)
 		}
@@ -22,7 +22,7 @@ func (app *App) Run() {
 }
 
 func (app *App) Stop(ctx context.Context) {
-	fmt.Println(app.handler.server.Shutdown(ctx))
+	fmt.Println(app.handler.Server.Shutdown(ctx))
 }
 
 func NewApp(cfg *config.Config) *App {

@@ -1,184 +1,104 @@
 package handlers
 
 import (
+	"Go_project/offeringService/internal/app/api/requests"
+	"Go_project/offeringService/internal/app/service"
+	"Go_project/offeringService/pkg/models"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/go-chi/chi/v5"
 	"io"
+	"log"
 	"net/http"
 )
 
-type BankHandlers interface {
-	GetBalanceHandler(w http.ResponseWriter, r *http.Request)
-	TopUpBalanceHandler(w http.ResponseWriter, r *http.Request)
-	TransferMoneyHandler(w http.ResponseWriter, r *http.Request)
+var ErrorCloseReqBody = errors.New("failed to close request body")
+var ErrorReadReqBody = errors.New("failed to read request body")
+
+type OfferingHandler struct {
+	Service *service.OfferingService
+	Server  *http.Server
 }
 
-type Handler struct {
-	Bank *bank.Bank
-}
+func NewHandler() *OfferingHandler {
+	offerService := service.NewService()
+	handler := OfferingHandler{Service: offerService}
 
-func NewHandler() *BankHandler {
-	return &BankHandler{Bank: bank}
-}
+	router := chi.NewRouter()
+	router.Post("/offers", handler.CreateOffer)
+	router.Get("/offers/{offerID}", handler.ParseOffer)
 
-func (bankHandler *BankHandler) GetBalanceHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, errors.New("invalid request method").Error(), http.StatusBadRequest)
-		return
+	handler.Server = &http.Server{
+		Addr:    ":8080",
+		Handler: router,
 	}
 
-	inputJSON, err := io.ReadAll(r.Body)
+	return &handler
+}
+
+func (h *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Request) {
+	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		log.Println(ErrorReadReqBody, err)
 	}
+
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Println(ErrorCloseReqBody, err)
 		}
 	}(r.Body)
 
-	var input models.AccountBalanceRequest
-	err = json.Unmarshal(inputJSON, &input)
+	var offerRequest requests.CreateOfferRequest
+	err = json.Unmarshal(bytes, &offerRequest)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	account, err := bankHandler.Bank.FindAccount(input.Id)
+	offer := models.Offer{From: offerRequest.From, To: offerRequest.To, ClientId: offerRequest.ClientId}
+	offer.Price = *h.Service.GetPrice(offer.From, offer.To)
+
+	encodedJwt, err := h.Service.EncodeJwt(&offer)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+
+	response := requests.CreateOfferResponse{OfferId: encodedJwt}
+	res, err := json.Marshal(response)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	outputJson, err := json.Marshal(models.AccountBalanceResponse{Balance: account.GetBalance(), Status: http.StatusOK})
+	_, err = w.Write(res)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	_, err = w.Write(outputJson)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	w.WriteHeader(http.StatusOK)
-	return
 }
 
-func (bankHandler *BankHandler) TopUpBalanceHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, errors.New("invalid request method").Error(), http.StatusBadRequest)
-		return
-	}
+func (h *OfferingHandler) ParseOffer(w http.ResponseWriter, r *http.Request) {
+	offerID := chi.URLParam(r, "offerID")
 
-	inputJSON, err := io.ReadAll(r.Body)
+	decodedOffer, err := h.Service.DecodeJwt(offerID)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}(r.Body)
 
-	var input models.TopUpBalanceRequest
-	err = json.Unmarshal(inputJSON, &input)
+	response := requests.ParseOfferResponse{From: decodedOffer.From, To: decodedOffer.To, Price: decodedOffer.Price, ClientId: decodedOffer.ClientId}
+	res, err := json.Marshal(response)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	account, err := bankHandler.Bank.FindAccount(input.Id)
+	_, err = w.Write(res)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	bankHandler.Bank.TopUpAccountBalance(account, input.Amount)
-	fmt.Println(bankHandler.Bank.Accountes)
-	outputJson, err := json.Marshal(models.TopUpBalanceResponse{Status: http.StatusOK})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, err = w.Write(outputJson)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
 	w.WriteHeader(http.StatusOK)
-	return
-}
-
-func (bankHandler *BankHandler) MoneyTransferHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "invalid request method", http.StatusBadRequest)
-		return
-	}
-
-	inputJSON, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	}(r.Body)
-
-	var input models.MoneyTransferRequest
-	err = json.Unmarshal(inputJSON, &input)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	if input.FromId == input.ToId {
-		http.Error(w, "you can not transfer money to yourself", http.StatusBadRequest)
-		return
-	}
-
-	fromAccount, err := bankHandler.Bank.FindAccount(input.FromId)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	toAccount, err := bankHandler.Bank.FindAccount(input.ToId)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
-		return
-	}
-
-	err = bankHandler.Bank.WithdrawMoneyFromAccount(fromAccount, input.Amount)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	bankHandler.Bank.TopUpAccountBalance(toAccount, input.Amount)
-
-	outputJson, err := json.Marshal(models.MoneyTransferResponse{Status: http.StatusOK})
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	_, err = w.Write(outputJson)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	return
 }
