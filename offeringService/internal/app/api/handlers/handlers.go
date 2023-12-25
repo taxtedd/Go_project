@@ -36,7 +36,7 @@ func NewHandler() *OfferingHandler {
 	return &handler
 }
 
-func (h *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Request) {
+func (handler *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Request) {
 	bytes, err := io.ReadAll(r.Body)
 	if err != nil {
 		log.Println(ErrorReadReqBody, err)
@@ -57,9 +57,9 @@ func (h *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	offer := models.Offer{From: offerRequest.From, To: offerRequest.To, ClientId: offerRequest.ClientId}
-	offer.Price = *h.Service.GetPrice(offer.From, offer.To)
+	offer.Price = *handler.Service.GetPrice(offer.From, offer.To)
 
-	encodedJwt, err := h.Service.EncodeJwt(&offer)
+	encodedJwt, err := handler.Service.EncodeJwt(&offer)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
@@ -79,10 +79,10 @@ func (h *OfferingHandler) CreateOffer(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *OfferingHandler) ParseOffer(w http.ResponseWriter, r *http.Request) {
+func (handler *OfferingHandler) ParseOffer(w http.ResponseWriter, r *http.Request) {
 	offerID := chi.URLParam(r, "offerID")
 
-	decodedOffer, err := h.Service.DecodeJwt(offerID)
+	decodedOffer, err := handler.Service.DecodeJwt(offerID)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
